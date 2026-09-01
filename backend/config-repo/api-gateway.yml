@@ -1,0 +1,19 @@
+spring:
+  cloud:
+    gateway:
+      routes:
+        - id: auth-service
+          uri: lb://auth-service
+          predicates:
+            - Path=/api/auth/**
+        - id: fleet-service
+          uri: lb://fleet-service
+          predicates:
+            - Path=/api/fleet/**
+        - id: shipment-service
+          uri: lb://shipment-service
+          predicates:
+            - Path=/api/shipments/**
+
+server:
+  port: 8089
