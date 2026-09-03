@@ -1,0 +1,19 @@
+package com.fleet.shipment.dto;
+
+import com.fleet.shipment.entity.Category;
+import com.fleet.shipment.entity.Severity;
+
+import java.time.LocalDateTime;
+import java.util.UUID;
+
+public record ShipmentExceptionResponse(
+        UUID id,
+        UUID shipmentId,
+        Severity severity,
+        Category category,
+        boolean resolved,
+        String rawInput,
+        String actionPlan,
+        String notificationText,
+        LocalDateTime createdAt
+) {}

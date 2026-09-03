@@ -4,6 +4,8 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -48,6 +50,11 @@ public class Shipment {
     @Column(nullable = false)
     @Builder.Default
     private ShipmentStatus status = ShipmentStatus.PENDING;
+
+    // Same-database relation (shipment_db) — a real JPA join, unlike Truck/Driver above
+    @OneToMany(mappedBy = "shipment", cascade = CascadeType.ALL, orphanRemoval = true)
+    @Builder.Default
+    private List<ShipmentException> exceptions = new ArrayList<>();
 
     @Column(nullable = false, updatable = false)
     @Builder.Default

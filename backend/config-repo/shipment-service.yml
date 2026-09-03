@@ -19,3 +19,10 @@ server:
 jwt:
   secret: 404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970
   expiration: 3600000 # 1 hour
+
+#ai service configuration for shipment service 
+ai:
+  service:
+    url: http://localhost:8000
+    apiKey: ${AI_SERVICE_API_KEY:dev-local-key}
+    timeoutMs: 8000
