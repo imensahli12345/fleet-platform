@@ -9,4 +9,6 @@ import java.util.UUID;
 public interface AuditLogRepository extends JpaRepository<AuditLog, UUID> {
 
     List<AuditLog> findByEntityTypeAndEntityIdOrderByCreatedAtDesc(String entityType, UUID entityId);
+
+    List<AuditLog> findByExceptionIdInOrderByCreatedAtDesc(List<UUID> exceptionIds);
 }

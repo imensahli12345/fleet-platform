@@ -10,6 +10,7 @@ public record ShipmentResponse(
         String origin,
         String destination,
         String customerName,
+        UUID customerAuthUserId,
         UUID assignedTruckId,
         UUID assignedDriverId,
         String assignedTruckRegistration,

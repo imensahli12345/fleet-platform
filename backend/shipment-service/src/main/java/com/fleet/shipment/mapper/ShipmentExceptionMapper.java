@@ -17,6 +17,9 @@ public class ShipmentExceptionMapper {
                 exception.getRawInput(),
                 exception.getActionPlan(),
                 exception.getNotificationText(),
+                exception.getAnalysisSource(),
+                exception.getNeedsReview(),
+                exception.getConfidence(),
                 exception.getCreatedAt()
         );
     }

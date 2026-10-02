@@ -51,6 +51,15 @@ public class ShipmentException {
     @Column(nullable = false, columnDefinition = "TEXT")
     private String notificationText;
 
+    // Nullable, permanently -- there is no correct historical value to backfill for exceptions
+    // created before this field existed, unlike e.g. customer_auth_user_id where a real value
+    // exists and can eventually be backfilled. See PROGRESS.md in ai-service for the rationale.
+    private String analysisSource;
+
+    private Boolean needsReview;
+
+    private Double confidence;
+
     @Column(nullable = false, updatable = false)
     @Builder.Default
     private LocalDateTime createdAt = LocalDateTime.now();

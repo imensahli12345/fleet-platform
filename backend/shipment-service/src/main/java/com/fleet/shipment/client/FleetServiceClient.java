@@ -41,6 +41,10 @@ public interface FleetServiceClient {
     @GetMapping("/api/fleet/trucks/{truckId}")
     TruckResponse getTruckById(@PathVariable("truckId") UUID truckId);
 
+    /** Resolves the fleet driver to its auth-service user ID for ownership checks. */
+    @GetMapping("/api/fleet/drivers/{driverId}")
+    DriverResponse getDriverById(@PathVariable("driverId") UUID driverId);
+
     /**
      * Calls POST /api/fleet/trucks/{truckId}/assign on fleet-service.
      * Assigns a driver to a truck and marks it as ASSIGNED.
@@ -54,4 +58,6 @@ public interface FleetServiceClient {
 
     /** Inner record used as the request body for the assign call */
     record AssignRequest(UUID driverId) {}
+
+    record DriverResponse(UUID id, UUID authUserId) {}
 }

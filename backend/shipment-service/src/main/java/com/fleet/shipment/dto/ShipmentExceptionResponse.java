@@ -15,5 +15,8 @@ public record ShipmentExceptionResponse(
         String rawInput,
         String actionPlan,
         String notificationText,
+        String analysisSource,
+        Boolean needsReview,
+        Double confidence,
         LocalDateTime createdAt
 ) {}

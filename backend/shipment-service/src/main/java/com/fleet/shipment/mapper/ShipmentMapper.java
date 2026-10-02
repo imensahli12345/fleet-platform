@@ -14,10 +14,11 @@ public class ShipmentMapper {
 
         return new ShipmentResponse(
             shipment.getId(),
-            shipment.getOrigin(),
-            shipment.getDestination(),
-            shipment.getCustomerName(),
-            shipment.getAssignedTruckId(),
+                shipment.getOrigin(),
+                shipment.getDestination(),
+                shipment.getCustomerName(),
+                shipment.getCustomerAuthUserId(),
+                shipment.getAssignedTruckId(),
             shipment.getAssignedDriverId(),
             shipment.getAssignedTruckRegistration(),
             shipment.getAssignedDriverName(),

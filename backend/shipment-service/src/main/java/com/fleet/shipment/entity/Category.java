@@ -4,5 +4,9 @@ package com.fleet.shipment.entity;
 public enum Category {
     VEHICLE_ISSUE,
     CUSTOMER_ABSENT,
-    WEATHER
+    WEATHER,
+    ROAD_TRAFFIC,
+    CARGO_ISSUE,
+    DRIVER_ISSUE,
+    OTHER
 }

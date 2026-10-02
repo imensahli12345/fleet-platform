@@ -1,3 +1,5 @@
 package com.fleet.shipment.dto;
 
-public record AnalyzeExceptionRequest(String rawText) {}
+import jakarta.validation.constraints.NotBlank;
+
+public record AnalyzeExceptionRequest(@NotBlank String rawText) {}

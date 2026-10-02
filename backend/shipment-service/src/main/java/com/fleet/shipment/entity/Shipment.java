@@ -38,6 +38,11 @@ public class Shipment {
     @Column(nullable = false)
     private String customerName;
 
+    // Auth-service user who owns this shipment. This is deliberately an ID,
+    // not a JPA relation, because auth-service owns the users database.
+    @Column(nullable = false)
+    private UUID customerAuthUserId;
+
     // UUID references to fleet-service — no JPA join, intentionally
     private UUID assignedTruckId;
     private UUID assignedDriverId;
@@ -51,7 +56,8 @@ public class Shipment {
     @Builder.Default
     private ShipmentStatus status = ShipmentStatus.PENDING;
 
-    // Same-database relation (shipment_db) — a real JPA join, unlike Truck/Driver above
+    // Same-database relation (shipment_db) — a real JPA join, unlike Truck/Driver
+    // above
     @OneToMany(mappedBy = "shipment", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default
     private List<ShipmentException> exceptions = new ArrayList<>();

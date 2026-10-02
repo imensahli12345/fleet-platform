@@ -3,6 +3,7 @@ package com.fleet.shipment.service;
 import com.fleet.shipment.client.AiServiceClient;
 import com.fleet.shipment.client.FleetServiceClient;
 import com.fleet.shipment.client.dto.TruckResponse;
+import com.fleet.shipment.dto.AuditLogResponse;
 import com.fleet.shipment.dto.CreateShipmentRequest;
 import com.fleet.shipment.dto.ExceptionAnalysisResult;
 import com.fleet.shipment.dto.ShipmentExceptionResponse;
@@ -27,6 +28,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 import java.util.UUID;
+import java.util.Comparator;
 
 @Service
 public class ShipmentService {
@@ -91,6 +93,7 @@ public class ShipmentService {
                 .origin(request.origin())
                 .destination(request.destination())
                 .customerName(request.customerName())
+                .customerAuthUserId(request.customerAuthUserId())
                 .assignedTruckId(assignedTruck.id())
                 .assignedDriverId(assignedTruck.assignedDriver().id())
                 .assignedTruckRegistration(assignedTruck.registrationNumber())
@@ -114,6 +117,7 @@ public class ShipmentService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Shipment not found"));
         return shipmentMapper.toResponse(shipment);
     }
+    //this method do something which is so complex the senario is : a driver send  a message to the ai-service and the ai-service send  a message to the customer 
     @Transactional
     public ExceptionAnalysisResult analyzeAndCreateException(UUID shipmentId, String rawInput) {
         Shipment shipment = shipmentRepository.findById(shipmentId)
@@ -126,6 +130,15 @@ public class ShipmentService {
             return ExceptionAnalysisResult.fallbackMode(e.getMessage());
         }
 
+        // Guard: if Jackson silently mapped fields to null (e.g. JSON field name mismatch),
+        // treat it as a failed analysis rather than letting a null reach the DB
+        if (aiResult.structuredRecord() == null
+                || aiResult.actionPlan() == null
+                || aiResult.customerNotification() == null) {
+            return ExceptionAnalysisResult.fallbackMode(
+                    "ai-service response was incomplete or could not be fully parsed");
+        }
+
         Severity severity;
         Category category;
         try {
@@ -136,6 +149,8 @@ public class ShipmentService {
             return ExceptionAnalysisResult.fallbackMode("AI returned an unrecognized severity/category");
         }
 
+        boolean needsReview = Boolean.TRUE.equals(aiResult.structuredRecord().needsReview());
+
         ShipmentException exception = ShipmentException.builder()
                 .shipment(shipment)
                 .severity(severity)
@@ -143,10 +158,14 @@ public class ShipmentService {
                 .rawInput(rawInput)
                 .actionPlan(aiResult.actionPlan())
                 .notificationText(aiResult.customerNotification())
+                .analysisSource(aiResult.analysisSource())
+                .needsReview(aiResult.structuredRecord().needsReview())
+                .confidence(aiResult.structuredRecord().confidence())
                 .build();
         exceptionRepository.save(exception);
 
         auditLogRepository.save(AuditLog.builder()
+                .exceptionId(exception.getId())
                 .entityType("EXCEPTION")
                 .entityId(exception.getId())
                 .action("CREATE")
@@ -154,8 +173,10 @@ public class ShipmentService {
                 .newState("OPEN")
                 .build());
 
-        // Rule B — HIGH/CRITICAL forces the shipment to HALTED
-        if (severity == Severity.HIGH || severity == Severity.CRITICAL) {
+        // Rule B — HIGH/CRITICAL forces the shipment to HALTED, unless the classification itself
+        // needs review: an uncertain OTHER should not auto-disrupt the shipment on a guess. See
+        // PROGRESS.md (ai-service) for the reasoning.
+        if ((severity == Severity.HIGH || severity == Severity.CRITICAL) && !needsReview) {
             String oldStatus = shipment.getStatus().name();
             shipment.setStatus(ShipmentStatus.HALTED);
             shipmentRepository.save(shipment);
@@ -189,6 +210,7 @@ public class ShipmentService {
         exceptionRepository.save(exception);
 
         auditLogRepository.save(AuditLog.builder()
+                .exceptionId(exceptionId)
                 .entityType("EXCEPTION")
                 .entityId(exceptionId)
                 .action("STATUS_CHANGE")
@@ -253,9 +275,70 @@ public class ShipmentService {
 
     @Transactional(readOnly = true)
     public List<ShipmentExceptionResponse> getExceptionsForShipment(UUID shipmentId) {
+        getShipment(shipmentId);
         return exceptionRepository.findByShipmentId(shipmentId).stream()
                 .map(exceptionMapper::toResponse)
                 .toList();
     }
-}
 
+    @Transactional(readOnly = true)
+    public List<AuditLogResponse> getAuditLogsForShipment(UUID shipmentId) {
+        getShipment(shipmentId);
+        List<UUID> exceptionIds = exceptionRepository.findByShipmentId(shipmentId).stream()
+                .map(ShipmentException::getId)
+                .toList();
+        List<AuditLog> auditLogs = new java.util.ArrayList<>(
+                auditLogRepository.findByEntityTypeAndEntityIdOrderByCreatedAtDesc("SHIPMENT", shipmentId));
+        if (!exceptionIds.isEmpty()) {
+            auditLogs.addAll(auditLogRepository.findByExceptionIdInOrderByCreatedAtDesc(exceptionIds));
+        }
+        return auditLogs.stream()
+                .sorted(Comparator.comparing(AuditLog::getCreatedAt).reversed())
+                .map(auditLog -> new AuditLogResponse(
+                        auditLog.getId(),
+                        auditLog.getExceptionId(),
+                        auditLog.getEntityType(),
+                        auditLog.getEntityId(),
+                        auditLog.getAction(),
+                        auditLog.getOldState(),
+                        auditLog.getNewState(),
+                        auditLog.getChangedBy(),
+                        auditLog.getCreatedAt()))
+                .toList();
+    }
+
+    /** Verifies the JWT subject against the customer recorded on the shipment. */
+    @Transactional(readOnly = true)
+    public void assertCustomerOwnsShipment(UUID shipmentId, UUID authUserId) {
+        Shipment shipment = getShipment(shipmentId);
+        if (!authUserId.equals(shipment.getCustomerAuthUserId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You do not own this shipment");
+        }
+    }
+
+    /**
+     * The shipment stores fleet-service's driver ID, while JWT subjects are
+     * auth-service user IDs. Resolve the driver before comparing identities.
+     */
+    @Transactional(readOnly = true)
+    public void assertDriverOwnsShipment(UUID shipmentId, UUID authUserId) {
+        Shipment shipment = getShipment(shipmentId);
+        try {
+            FleetServiceClient.DriverResponse driver =
+                    fleetServiceClient.getDriverById(shipment.getAssignedDriverId());
+            if (!authUserId.equals(driver.authUserId())) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You are not assigned to this shipment");
+            }
+        } catch (FeignException.NotFound exception) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Assigned driver not found in fleet-service");
+        } catch (FeignException exception) {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                    "Could not communicate with fleet-service to verify the assigned driver");
+        }
+    }
+
+    private Shipment getShipment(UUID shipmentId) {
+        return shipmentRepository.findById(shipmentId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Shipment not found"));
+    }
+}
