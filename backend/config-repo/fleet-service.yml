@@ -2,7 +2,7 @@
   datasource:
     url: jdbc:postgresql://localhost:5432/fleet_db
     username: postgres
-    password: fleet123
+    password: ${DB_PASSWORD}
     driver-class-name: org.postgresql.Driver
   jpa:
     hibernate:
