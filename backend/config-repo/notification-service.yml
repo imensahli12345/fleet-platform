@@ -1,0 +1,33 @@
+server:
+  port: 8084
+
+spring:
+  data:
+    mongodb:
+      uri: mongodb://localhost:27017/notification_db
+      auto-index-creation: true
+      # Store UUIDs in the standard binary form (readable as UUID in mongosh/Compass).
+      uuid-representation: standard
+  # Kafka consumer for incident-events (published by shipment-service after its DB commit)
+  kafka:
+    bootstrap-servers: localhost:9092
+    consumer:
+      group-id: notification-service
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      # ErrorHandlingDeserializer: a malformed message is logged and skipped instead of
+      # blocking the partition forever.
+      value-deserializer: org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
+      properties:
+        spring.deserializer.value.delegate.class: org.springframework.kafka.support.serializer.JsonDeserializer
+        spring.json.value.default.type: com.fleet.notification.kafka.IncidentEvent
+        spring.json.use.type.headers: false
+        spring.json.trusted.packages: com.fleet.notification.kafka
+
+jwt:
+  secret: 404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970
+
+app:
+  kafka:
+    topics:
+      incident-events: incident-events

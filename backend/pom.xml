@@ -14,6 +14,7 @@
     <module>auth-service</module>
     <module>fleet-service</module>
     <module>shipment-service</module>
+    <module>notification-service</module>
   </modules>
   <properties>
     <java.version>17</java.version>
