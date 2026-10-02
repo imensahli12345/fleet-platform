@@ -2,7 +2,7 @@ spring:
   datasource:
     url: jdbc:postgresql://localhost:5432/fleet_db
     username: postgres
-    password: fleet123
+    password: ${DB_PASSWORD}
     driver-class-name: org.postgresql.Driver
   jpa:
     hibernate:
@@ -25,4 +25,5 @@ ai:
   service:
     url: http://localhost:8000
     apiKey: ${AI_SERVICE_API_KEY:dev-local-key}
-    timeoutMs: 8000
+    timeoutMs: 14000
+
