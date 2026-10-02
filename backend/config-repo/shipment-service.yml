@@ -11,6 +11,25 @@ spring:
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
+  # Kafka producer for incident-events (published only after the DB commit, see IncidentEventPublisher)
+  kafka:
+    bootstrap-servers: localhost:9092
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      acks: all
+      properties:
+        # Plain JSON, no Java class name in headers: consumers map it to their own type.
+        spring.json.add.type.headers: false
+        # Kafka down must not hang the API: give up after ~3s and just log the failure.
+        max.block.ms: 3000
+        request.timeout.ms: 5000
+        delivery.timeout.ms: 10000
+
+app:
+  kafka:
+    topics:
+      incident-events: incident-events
 
 server:
   port: 8083

@@ -14,6 +14,8 @@ import com.fleet.shipment.entity.Severity;
 import com.fleet.shipment.entity.Shipment;
 import com.fleet.shipment.entity.ShipmentException;
 import com.fleet.shipment.entity.ShipmentStatus;
+import com.fleet.shipment.event.IncidentEvent;
+import com.fleet.shipment.event.IncidentEvent.IncidentEventType;
 import com.fleet.shipment.exception.AiAnalysisFailedException;
 import com.fleet.shipment.mapper.ShipmentExceptionMapper;
 import com.fleet.shipment.mapper.ShipmentMapper;
@@ -21,11 +23,13 @@ import com.fleet.shipment.repository.AuditLogRepository;
 import com.fleet.shipment.repository.ShipmentExceptionRepository;
 import com.fleet.shipment.repository.ShipmentRepository;
 import feign.FeignException;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import java.util.Comparator;
@@ -40,6 +44,7 @@ public class ShipmentService {
     private final AiServiceClient aiServiceClient;
     private final ShipmentMapper shipmentMapper;
     private final ShipmentExceptionMapper exceptionMapper;
+    private final ApplicationEventPublisher eventPublisher;
 
     public ShipmentService(ShipmentRepository shipmentRepository,
                            ShipmentExceptionRepository exceptionRepository,
@@ -47,7 +52,8 @@ public class ShipmentService {
                            FleetServiceClient fleetServiceClient,
                            AiServiceClient aiServiceClient,
                            ShipmentMapper shipmentMapper,
-                           ShipmentExceptionMapper exceptionMapper) {
+                           ShipmentExceptionMapper exceptionMapper,
+                           ApplicationEventPublisher eventPublisher) {
         this.shipmentRepository = shipmentRepository;
         this.exceptionRepository = exceptionRepository;
         this.auditLogRepository = auditLogRepository;
@@ -55,6 +61,7 @@ public class ShipmentService {
         this.aiServiceClient = aiServiceClient;
         this.shipmentMapper = shipmentMapper;
         this.exceptionMapper = exceptionMapper;
+        this.eventPublisher = eventPublisher;
     }
 
     @Transactional
@@ -190,6 +197,10 @@ public class ShipmentService {
                     .build());
         }
 
+        // Only queued here: IncidentEventPublisher sends it to Kafka after this transaction commits.
+        eventPublisher.publishEvent(incidentEvent(IncidentEventType.INCIDENT_CREATED, exception, shipment,
+                exception.getNotificationText()));
+
         return ExceptionAnalysisResult.success(exceptionMapper.toResponse(exception));
     }
 
@@ -235,7 +246,25 @@ public class ShipmentService {
                     .build());
         }
 
+        // Only queued here: IncidentEventPublisher sends it to Kafka after this transaction commits.
+        eventPublisher.publishEvent(incidentEvent(IncidentEventType.INCIDENT_RESOLVED, exception, shipment, null));
+
         return exceptionMapper.toResponse(exception);
+    }
+
+    private static IncidentEvent incidentEvent(IncidentEventType type, ShipmentException exception,
+                                               Shipment shipment, String customerMessage) {
+        return new IncidentEvent(
+                UUID.randomUUID(),
+                type,
+                shipment.getId(),
+                exception.getId(),
+                shipment.getCustomerAuthUserId(),
+                shipment.getCustomerName(),
+                exception.getSeverity().name(),
+                exception.getCategory().name(),
+                customerMessage,
+                Instant.now());
     }
 
     /**

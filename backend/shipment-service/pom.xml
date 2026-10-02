@@ -79,6 +79,11 @@
             <version>0.12.5</version>
             <scope>runtime</scope>
         </dependency>
+        <!-- Kafka producer: publishes incident-events after the DB commit -->
+        <dependency>
+            <groupId>org.springframework.kafka</groupId>
+            <artifactId>spring-kafka</artifactId>
+        </dependency>
         <!-- Lombok: generates getters/setters/builders at compile time -->
         <dependency>
             <groupId>org.projectlombok</groupId>
