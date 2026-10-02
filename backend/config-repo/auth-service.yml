@@ -2,7 +2,7 @@ spring:
   datasource:
     url: jdbc:postgresql://localhost:5432/fleet_db
     username: postgres
-    password: fleet123
+    password: ${DB_PASSWORD}
     driver-class-name: org.postgresql.Driver
     #driver howa eli ykhali spring w  postgres yefhmou b3adhhom , howa eli ya3mel traduction mabinethom
   jpa:
