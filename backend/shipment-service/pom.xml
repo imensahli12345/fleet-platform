@@ -79,6 +79,21 @@
             <version>0.12.5</version>
             <scope>runtime</scope>
         </dependency>
+        <!-- Resilience4j circuit breaker around the fleet-service Feign calls -->
+        <dependency>
+            <groupId>io.github.resilience4j</groupId>
+            <artifactId>resilience4j-spring-boot3</artifactId>
+        </dependency>
+        <!-- Needed by Resilience4j's @CircuitBreaker annotation (AOP proxy) -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-aop</artifactId>
+        </dependency>
+        <!-- Exposes /actuator/health and /actuator/circuitbreakers (breaker state for the demo) -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
         <!-- Kafka producer: publishes incident-events after the DB commit -->
         <dependency>
             <groupId>org.springframework.kafka</groupId>

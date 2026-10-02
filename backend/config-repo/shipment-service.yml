@@ -26,10 +26,49 @@ spring:
         request.timeout.ms: 5000
         delivery.timeout.ms: 10000
 
+  # Feign timeouts for fleet-service: a hung fleet-service must not hold requests for 60s.
+  cloud:
+    openfeign:
+      client:
+        config:
+          fleet-service:
+            connect-timeout: 2000
+            read-timeout: 3000
+
 app:
   kafka:
     topics:
       incident-events: incident-events
+
+# Circuit breaker around fleet-service (FleetGateway)
+resilience4j:
+  circuitbreaker:
+    instances:
+      fleet-service:
+        sliding-window-type: COUNT_BASED
+        sliding-window-size: 10            # judge the last 10 calls
+        minimum-number-of-calls: 5         # ...but only once at least 5 calls were made
+        failure-rate-threshold: 50         # OPEN when >= 50% of them failed
+        slow-call-duration-threshold: 3s   # a call slower than 3s counts as bad...
+        slow-call-rate-threshold: 100      # ...OPEN only if ALL recent calls were slow
+        wait-duration-in-open-state: 10s   # stay OPEN 10s, then allow trial calls
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+        register-health-indicator: true
+        # Only outages count as failures: unreachable/timeout (RetryableException) and 5xx.
+        # A 404 "truck not found" or a 4xx is a correct answer from fleet-service, not a failure.
+        record-exceptions:
+          - feign.RetryableException
+          - feign.FeignException$FeignServerException
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,circuitbreakers,circuitbreakerevents
+  health:
+    circuitbreakers:
+      enabled: true
 
 server:
   port: 8083

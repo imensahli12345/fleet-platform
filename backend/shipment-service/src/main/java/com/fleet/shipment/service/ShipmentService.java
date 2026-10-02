@@ -1,6 +1,7 @@
 package com.fleet.shipment.service;
 
 import com.fleet.shipment.client.AiServiceClient;
+import com.fleet.shipment.client.FleetGateway;
 import com.fleet.shipment.client.FleetServiceClient;
 import com.fleet.shipment.client.dto.TruckResponse;
 import com.fleet.shipment.dto.AuditLogResponse;
@@ -23,6 +24,7 @@ import com.fleet.shipment.repository.AuditLogRepository;
 import com.fleet.shipment.repository.ShipmentExceptionRepository;
 import com.fleet.shipment.repository.ShipmentRepository;
 import feign.FeignException;
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -37,10 +39,13 @@ import java.util.Comparator;
 @Service
 public class ShipmentService {
 
+    private static final String FLEET_CIRCUIT_OPEN =
+            "fleet-service is temporarily unavailable (circuit breaker open); please retry shortly";
+
     private final ShipmentRepository shipmentRepository;
     private final ShipmentExceptionRepository exceptionRepository;
     private final AuditLogRepository auditLogRepository;
-    private final FleetServiceClient fleetServiceClient;
+    private final FleetGateway fleetGateway;
     private final AiServiceClient aiServiceClient;
     private final ShipmentMapper shipmentMapper;
     private final ShipmentExceptionMapper exceptionMapper;
@@ -49,7 +54,7 @@ public class ShipmentService {
     public ShipmentService(ShipmentRepository shipmentRepository,
                            ShipmentExceptionRepository exceptionRepository,
                            AuditLogRepository auditLogRepository,
-                           FleetServiceClient fleetServiceClient,
+                           FleetGateway fleetGateway,
                            AiServiceClient aiServiceClient,
                            ShipmentMapper shipmentMapper,
                            ShipmentExceptionMapper exceptionMapper,
@@ -57,7 +62,7 @@ public class ShipmentService {
         this.shipmentRepository = shipmentRepository;
         this.exceptionRepository = exceptionRepository;
         this.auditLogRepository = auditLogRepository;
-        this.fleetServiceClient = fleetServiceClient;
+        this.fleetGateway = fleetGateway;
         this.aiServiceClient = aiServiceClient;
         this.shipmentMapper = shipmentMapper;
         this.exceptionMapper = exceptionMapper;
@@ -71,18 +76,21 @@ public class ShipmentService {
         try {
             if (request.assignedTruckId() != null) {
                 // If dispatcher provided a specific truck, validate it
-                assignedTruck = fleetServiceClient.getTruckById(request.assignedTruckId());
+                assignedTruck = fleetGateway.getTruckById(request.assignedTruckId());
                 if (!"ASSIGNED".equals(assignedTruck.status())) {
                     throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "The requested truck must be ASSIGNED to a driver before it can take a shipment");
                 }
             } else {
                 // Auto-assign the first available truck
-                List<TruckResponse> availableTrucks = fleetServiceClient.getAvailableTrucks();
+                List<TruckResponse> availableTrucks = fleetGateway.getAvailableTrucks();
                 if (availableTrucks.isEmpty()) {
                     throw new ResponseStatusException(HttpStatus.CONFLICT, "No available trucks found in the fleet");
                 }
                 assignedTruck = availableTrucks.get(0);
             }
+        } catch (CallNotPermittedException e) {
+            // Circuit breaker OPEN: fleet-service has been failing, so we fail fast instead of waiting on it.
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, FLEET_CIRCUIT_OPEN);
         } catch (FeignException.NotFound e) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Requested truck not found in fleet-service");
         } catch (FeignException e) {
@@ -354,10 +362,13 @@ public class ShipmentService {
         Shipment shipment = getShipment(shipmentId);
         try {
             FleetServiceClient.DriverResponse driver =
-                    fleetServiceClient.getDriverById(shipment.getAssignedDriverId());
+                    fleetGateway.getDriverById(shipment.getAssignedDriverId());
             if (!authUserId.equals(driver.authUserId())) {
                 throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You are not assigned to this shipment");
             }
+        } catch (CallNotPermittedException exception) {
+            // Fail closed: if the driver's identity cannot be verified, the request is refused, never allowed.
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, FLEET_CIRCUIT_OPEN);
         } catch (FeignException.NotFound exception) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Assigned driver not found in fleet-service");
         } catch (FeignException exception) {
