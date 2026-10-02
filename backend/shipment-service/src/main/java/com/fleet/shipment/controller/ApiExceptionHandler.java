@@ -13,12 +13,13 @@ import org.springframework.web.server.ResponseStatusException;
 @RestControllerAdvice
 public class ApiExceptionHandler {
 
+    // Returns a ResponseEntity so the HTTP status matches the body's "status" (a bare Map was sent as 200).
     @ExceptionHandler(ResponseStatusException.class)
-    public Map<String, Object> handleResponseStatus(ResponseStatusException exception) {
+    public ResponseEntity<Map<String, Object>> handleResponseStatus(ResponseStatusException exception) {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("status", exception.getStatusCode().value());
         body.put("error", exception.getReason());
-        return body;
+        return ResponseEntity.status(exception.getStatusCode()).body(body);
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
