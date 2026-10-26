@@ -1,0 +1,62 @@
+# Eureka (service registry). Started first: every other service registers here.
+# Note: on Kubernetes, Services + DNS already do service discovery. We keep Eureka
+# so the app works unchanged; removing it is an exercise for the production phase.
+apiVersion: v1
+kind: Service
+metadata:
+  name: discovery-server
+  namespace: fleet
+spec:
+  selector:
+    app: discovery-server
+  ports:
+    - port: 8761
+      targetPort: 8761
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: discovery-server
+  namespace: fleet
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: discovery-server
+  template:
+    metadata:
+      labels:
+        app: discovery-server
+    spec:
+      containers:
+        - name: discovery-server
+          image: imensahli/fleet-discovery-server:0.1.0
+          ports:
+            - containerPort: 8761
+          envFrom:
+            - configMapRef:
+                name: fleet-config
+          resources:
+            requests:
+              cpu: 100m
+              memory: 384Mi
+            limits:
+              memory: 512Mi
+          # startupProbe: Spring Boot needs 20-60s to start. Until this succeeds, the other
+          # probes are paused, so a slow start is not mistaken for a dead pod.
+          startupProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8761
+            periodSeconds: 5
+            failureThreshold: 40          # up to 200s to start
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8761
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8761
+            periodSeconds: 20

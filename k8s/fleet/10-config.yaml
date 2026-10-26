@@ -1,0 +1,19 @@
+# ConfigMap = non-secret settings shared by our Spring services.
+# Each key becomes an environment variable in the pod (envFrom), and fills the
+# ${...} placeholders in config-repo, e.g. ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}.
+# Every value is a Kubernetes Service name: that's how pods find each other.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fleet-config
+  namespace: fleet
+data:
+  CONFIG_SERVER_URL: http://config-server:8888
+  EUREKA_URL: http://discovery-server:8761/eureka/
+  POSTGRES_HOST: postgres
+  MONGODB_URI: mongodb://mongodb:27017/notification_db
+  KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+  AI_SERVICE_URL: http://ai-service:8000
+  # The JVM may use 60% of the container memory limit for its heap; the rest is for
+  # metaspace, threads... Above the limit the pod is killed (OOMKilled).
+  JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=60

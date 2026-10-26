@@ -16,6 +16,11 @@
     <name>auth-service</name>
 
     <dependencies>
+        <!-- Actuator: /actuator/health, used by the Kubernetes probes -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>

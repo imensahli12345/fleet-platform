@@ -1,7 +1,7 @@
 eureka:
   client:
     service-url:
-      defaultZone: http://localhost:8761/eureka/
+      defaultZone: ${EUREKA_URL:http://localhost:8761/eureka/}
   # Register with the IP address, not the machine hostname: on Windows with Docker/WSL the hostname
   # (e.g. DESKTOP-xxx.mshome.net) is not resolvable by the gateway's Netty DNS resolver -> 500 errors.
   instance:

@@ -1,0 +1,54 @@
+# ai-service (Python/FastAPI, lives in D:\ai-service): analyses incidents for shipment-service.
+# Its API keys come from the Secret "ai-service-secret", created from its .env file:
+#   kubectl create secret generic ai-service-secret -n fleet --from-env-file=D:/ai-service/.env
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai-service
+  namespace: fleet
+spec:
+  selector:
+    app: ai-service
+  ports:
+    - port: 8000
+      targetPort: 8000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-service
+  namespace: fleet
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ai-service
+  template:
+    metadata:
+      labels:
+        app: ai-service
+    spec:
+      containers:
+        - name: ai-service
+          image: imensahli/fleet-ai-service:0.1.0
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - secretRef:               # every key of the Secret becomes an env variable
+                name: ai-service-secret
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              memory: 256Mi
+          readinessProbe:              # Python starts in ~2s: no startupProbe needed
+            httpGet:
+              path: /healthz
+              port: 8000
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8000
+            periodSeconds: 20

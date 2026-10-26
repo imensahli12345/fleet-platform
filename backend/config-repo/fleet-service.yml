@@ -1,7 +1,7 @@
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5432/fleet_db
-    username: postgres
+    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:5432/fleet_db
+    username: ${DB_USERNAME:postgres}
     password: ${DB_PASSWORD:admin}
     driver-class-name: org.postgresql.Driver
   jpa:
@@ -25,4 +25,4 @@ server:
   port: 8082
 
 jwt:
-  secret: 404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970
+  secret: ${JWT_SECRET:404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}

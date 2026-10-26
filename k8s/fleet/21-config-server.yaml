@@ -1,0 +1,59 @@
+# Spring Cloud Config Server: serves backend/config-repo (baked into the image) to the services.
+# Note: ConfigMaps are the Kubernetes-native equivalent; kept for now so the app is unchanged.
+apiVersion: v1
+kind: Service
+metadata:
+  name: config-server
+  namespace: fleet
+spec:
+  selector:
+    app: config-server
+  ports:
+    - port: 8888
+      targetPort: 8888
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: config-server
+  namespace: fleet
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: config-server
+  template:
+    metadata:
+      labels:
+        app: config-server
+    spec:
+      containers:
+        - name: config-server
+          image: imensahli/fleet-config-server:0.1.0
+          ports:
+            - containerPort: 8888
+          envFrom:
+            - configMapRef:
+                name: fleet-config
+          resources:
+            requests:
+              cpu: 100m
+              memory: 384Mi
+            limits:
+              memory: 512Mi
+          startupProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8888
+            periodSeconds: 5
+            failureThreshold: 40
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8888
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8888
+            periodSeconds: 20

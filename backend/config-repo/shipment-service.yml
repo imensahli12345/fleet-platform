@@ -1,7 +1,7 @@
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5432/fleet_db
-    username: postgres
+    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:5432/fleet_db
+    username: ${DB_USERNAME:postgres}
     password: ${DB_PASSWORD:admin}
     driver-class-name: org.postgresql.Driver
   jpa:
@@ -13,7 +13,7 @@ spring:
         dialect: org.hibernate.dialect.PostgreSQLDialect
   # Kafka producer for incident-events (published only after the DB commit, see IncidentEventPublisher)
   kafka:
-    bootstrap-servers: localhost:9092
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
@@ -75,13 +75,13 @@ server:
 #configuring database for shipment service 
 
 jwt:
-  secret: 404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970
+  secret: ${JWT_SECRET:404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}
   expiration: 3600000 # 1 hour
 
 #ai service configuration for shipment service 
 ai:
   service:
-    url: http://localhost:8000
+    url: ${AI_SERVICE_URL:http://localhost:8000}
     apiKey: ${AI_SERVICE_API_KEY:dev-local-key}
     timeoutMs: 14000
 

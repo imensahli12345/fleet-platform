@@ -1,0 +1,81 @@
+# fleet-service: Service (stable name "fleet-service") + Deployment.
+apiVersion: v1
+kind: Service
+metadata:
+  name: fleet-service
+  namespace: fleet
+spec:
+  selector:
+    app: fleet-service
+  ports:
+    - port: 8082
+      targetPort: 8082
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fleet-service
+  namespace: fleet
+spec:
+  replicas: 1                        # local PC: 1. Production: 2+ (see docs/kubernetes-learning-path.md)
+  selector:
+    matchLabels:
+      app: fleet-service
+  template:
+    metadata:
+      labels:
+        app: fleet-service
+    spec:
+      # initContainers run BEFORE the app, one after the other, and must succeed.
+      # This one waits until config-server answers, otherwise the service would start
+      # without its configuration (no database URL...) and crash.
+      initContainers:
+        - name: wait-for-config-server
+          image: busybox:1.36
+          command: ["sh", "-c", "until wget -q -O /dev/null http://config-server:8888/actuator/health; do echo waiting for config-server; sleep 3; done"]
+      containers:
+        - name: fleet-service
+          image: imensahli/fleet-fleet-service:0.1.0
+          ports:
+            - containerPort: 8082
+          envFrom:                   # every key of the ConfigMap becomes an env variable
+            - configMapRef:
+                name: fleet-config
+          env:
+            - name: JWT_SECRET       # same secret everywhere: auth signs tokens, the others verify them
+              valueFrom:
+                secretKeyRef:
+                  name: jwt-secret
+                  key: JWT_SECRET
+            - name: DB_USERNAME      # database login, read from the Secret created in Step 7
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: POSTGRES_USER
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: POSTGRES_PASSWORD
+          resources:
+            requests:                # what the scheduler reserves on a node
+              cpu: 100m
+              memory: 384Mi
+            limits:                  # no CPU limit on purpose: the JVM can use spare CPU to start faster
+              memory: 512Mi
+          startupProbe:              # gives Spring Boot up to 200s to start before the other probes run
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8082
+            periodSeconds: 5
+            failureThreshold: 40
+          readinessProbe:            # not ready -> removed from the Service, gets no traffic
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8082
+            periodSeconds: 10
+          livenessProbe:             # fails 3 times -> the kubelet restarts the container
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8082
+            periodSeconds: 20
