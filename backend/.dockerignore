@@ -1,0 +1,8 @@
+# Build context for every service image is backend/ (each module needs the parent pom.xml).
+# Keep the context small and never ship local build output or logs.
+**/target/
+**/.run-logs/
+**/*.log
+**/.idea/
+**/.vscode/
+**/*.iml
