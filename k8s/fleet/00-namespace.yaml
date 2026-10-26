@@ -1,0 +1,5 @@
+# The namespace ("folder") for the whole fleet platform.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: fleet

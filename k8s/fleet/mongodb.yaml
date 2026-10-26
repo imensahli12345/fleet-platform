@@ -1,0 +1,66 @@
+# MongoDB for notification-service (database notification_db).
+# Same pattern as postgres.yaml: headless Service + StatefulSet + its own disk.
+# No authentication, like docker-compose.yml (to add in the production phase).
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongodb
+  namespace: fleet
+spec:
+  clusterIP: None
+  selector:
+    app: mongodb
+  ports:
+    - port: 27017
+      targetPort: 27017
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mongodb
+  namespace: fleet
+spec:
+  serviceName: mongodb
+  replicas: 1                    # production: 3-member replica set (needs extra config)
+  selector:
+    matchLabels:
+      app: mongodb
+  template:
+    metadata:
+      labels:
+        app: mongodb
+    spec:
+      containers:
+        - name: mongodb
+          image: mongo:6         # same version as docker-compose.yml
+          # Mongo uses ~50% of RAM for its cache by default; cap it to fit the memory limit.
+          args: ["--wiredTigerCacheSizeGB", "0.25"]
+          ports:
+            - containerPort: 27017
+          volumeMounts:
+            - name: data
+              mountPath: /data/db
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 768Mi
+          readinessProbe:        # "does Mongo answer a ping?"
+            exec:
+              command: ["mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+            periodSeconds: 10
+            timeoutSeconds: 5    # mongosh is slow to start, the default 1s is too short
+          livenessProbe:         # lighter check: "is the port open?"
+            tcpSocket:
+              port: 27017
+            initialDelaySeconds: 30
+            periodSeconds: 10
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 2Gi

@@ -1,0 +1,61 @@
+# Learning file: the same "hello" app we built with commands, written as YAML.
+# Apply with:  kubectl apply -f k8s/playground/hello.yaml
+# Three objects in one file, separated by "---".
+
+# 1) The namespace = a folder for our objects.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: playground
+---
+# 2) The Deployment = "I want N copies of this container, always".
+apiVersion: apps/v1            # which API group this object belongs to
+kind: Deployment               # what kind of object
+metadata:
+  name: hello                  # its name
+  namespace: playground        # which folder it lives in
+spec:                          # spec = the desired state (what we want)
+  replicas: 3                  # how many pods
+  selector:
+    matchLabels:
+      app: hello               # "the pods I manage are the ones labeled app=hello"
+  template:                    # the mold used to create each pod
+    metadata:
+      labels:
+        app: hello             # every pod gets this label (must match the selector above)
+    spec:
+      containers:
+        - name: hello
+          image: traefik/whoami:v1.10.3   # always a fixed version, never "latest"
+          ports:
+            - containerPort: 80
+          resources:
+            requests:          # what the scheduler reserves on a node for this pod
+              cpu: 10m         # 10 millicores = 1% of one CPU
+              memory: 16Mi
+            limits:            # the maximum; above the memory limit the pod is killed (OOMKilled)
+              memory: 32Mi
+          readinessProbe:      # "is the pod ready to receive traffic?" if not, the Service skips it
+            httpGet:
+              path: /
+              port: 80
+            periodSeconds: 5
+          livenessProbe:       # "is the pod still alive?" if not, the kubelet restarts it
+            httpGet:
+              path: /
+              port: 80
+            periodSeconds: 10
+---
+# 3) The Service = a fixed name/IP in front of the pods labeled app=hello.
+apiVersion: v1
+kind: Service
+metadata:
+  name: hello
+  namespace: playground
+spec:
+  type: ClusterIP              # reachable only inside the cluster
+  selector:
+    app: hello                 # send traffic to pods with this label
+  ports:
+    - port: 80                 # the port of the Service (http://hello:80)
+      targetPort: 80           # the port of the container

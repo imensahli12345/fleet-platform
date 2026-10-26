@@ -1,0 +1,103 @@
+# Kafka for incident-events (producer: shipment-service, consumer: notification-service).
+# 1 broker in KRaft mode (no ZooKeeper), same as docker-compose.yml.
+# Production: 3 brokers + replication factor 3 (usually with the Strimzi operator).
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka
+  namespace: fleet
+spec:
+  clusterIP: None
+  selector:
+    app: kafka
+  ports:
+    - name: client
+      port: 9092
+      targetPort: 9092
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: kafka
+  namespace: fleet
+spec:
+  serviceName: kafka
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kafka
+  template:
+    metadata:
+      labels:
+        app: kafka
+    spec:
+      # Kubernetes normally injects env vars like KAFKA_PORT=tcp://... for every Service.
+      # The Kafka image turns every KAFKA_* variable into a Kafka setting -> broken config.
+      enableServiceLinks: false
+      containers:
+        - name: kafka
+          image: apache/kafka:3.7.0   # same version as docker-compose.yml
+          ports:
+            - containerPort: 9092     # clients (our services)
+            - containerPort: 9093     # controller (Kafka's internal "brain")
+          env:
+            - name: POD_NAME          # the pod's own name (kafka-0), given by Kubernetes
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: KAFKA_NODE_ID
+              value: "1"
+            - name: KAFKA_PROCESS_ROLES
+              value: broker,controller
+            - name: KAFKA_LISTENERS
+              value: PLAINTEXT://:9092,CONTROLLER://:9093
+            # THE important line: the address Kafka gives to clients.
+            # docker-compose says "localhost:9092" -> in K8s every client would call itself.
+            # Here: the stable DNS name of this StatefulSet pod.
+            - name: KAFKA_ADVERTISED_LISTENERS
+              value: PLAINTEXT://$(POD_NAME).kafka.fleet.svc.cluster.local:9092
+            - name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP
+              value: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+            - name: KAFKA_CONTROLLER_QUORUM_VOTERS
+              value: 1@localhost:9093   # single node: the controller is this same process
+            - name: KAFKA_CONTROLLER_LISTENER_NAMES
+              value: CONTROLLER
+            - name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR
+              value: "1"
+            - name: KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR
+              value: "1"
+            - name: KAFKA_TRANSACTION_STATE_LOG_MIN_ISR
+              value: "1"
+            - name: KAFKA_AUTO_CREATE_TOPICS_ENABLE
+              value: "true"
+            - name: KAFKA_LOG_DIRS           # store messages on the persistent disk, not in /tmp
+              value: /var/lib/kafka/data/logs
+            - name: KAFKA_HEAP_OPTS          # JVM memory, must stay below the container limit
+              value: "-Xms512m -Xmx512m"
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/kafka/data
+          resources:
+            requests:
+              cpu: 200m
+              memory: 768Mi
+            limits:
+              memory: 1Gi
+          readinessProbe:
+            tcpSocket:
+              port: 9092
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: 9092
+            initialDelaySeconds: 60
+            periodSeconds: 20
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 5Gi

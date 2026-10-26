@@ -1,0 +1,86 @@
+# PostgreSQL for auth-service, fleet-service and shipment-service (database fleet_db).
+# Needs the Secret "postgres-secret" (see postgres-secret.example.yaml).
+
+# Headless Service (clusterIP: None): no load-balancing IP, the DNS name "postgres"
+# points straight to the pod. A StatefulSet needs one to give its pods stable DNS names
+# (postgres-0.postgres.fleet.svc.cluster.local).
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: fleet
+spec:
+  clusterIP: None
+  selector:
+    app: postgres
+  ports:
+    - port: 5432
+      targetPort: 5432
+---
+# StatefulSet instead of Deployment, because a database has DATA:
+#  - stable pod name: postgres-0 (not postgres-7f9c-xk2p)
+#  - each pod gets its OWN disk, which stays attached to that name when the pod is recreated
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: fleet
+spec:
+  serviceName: postgres          # the headless Service above
+  replicas: 1                    # Postgres can't just be scaled: replicas need replication (see notes)
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:15     # same version as docker-compose.yml
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              value: fleet_db
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:      # read from the Secret, never written here
+                  name: postgres-secret
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: POSTGRES_PASSWORD
+            - name: PGDATA         # a sub-folder of the volume (Postgres wants an empty dir)
+              value: /var/lib/postgresql/data/pgdata
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+          readinessProbe:          # pg_isready = "does Postgres accept connections?"
+            exec:
+              command: ["sh", "-c", "pg_isready -U \"$POSTGRES_USER\" -d fleet_db"]
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["sh", "-c", "pg_isready -U \"$POSTGRES_USER\" -d fleet_db"]
+            initialDelaySeconds: 30
+            periodSeconds: 10
+  # One PersistentVolumeClaim per pod: "postgres-0 needs 2 GB of disk".
+  # Kubernetes creates the claim data-postgres-0, and the StorageClass creates the real disk.
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]   # one node at a time can write to it
+        resources:
+          requests:
+            storage: 2Gi
