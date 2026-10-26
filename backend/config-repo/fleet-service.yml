@@ -1,8 +1,8 @@
-﻿spring:
+spring:
   datasource:
     url: jdbc:postgresql://localhost:5432/fleet_db
     username: postgres
-    password: ${DB_PASSWORD}
+    password: ${DB_PASSWORD:admin}
     driver-class-name: org.postgresql.Driver
   jpa:
     hibernate:
@@ -11,6 +11,15 @@
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
+  # Feign timeouts for shipment-service (active-shipment check before unassign):
+  # a hung shipment-service must not hold the request for 60s.
+  cloud:
+    openfeign:
+      client:
+        config:
+          shipment-service:
+            connect-timeout: 2000
+            read-timeout: 3000
 
 server:
   port: 8082

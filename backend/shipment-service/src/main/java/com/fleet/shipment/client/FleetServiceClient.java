@@ -35,6 +35,13 @@ public interface FleetServiceClient {
     List<TruckResponse> getAvailableTrucks();
 
     /**
+     * Calls GET /api/fleet/trucks on fleet-service.
+     * Used when auto-assigning: only ASSIGNED trucks (with a driver) can take a shipment.
+     */
+    @GetMapping("/api/fleet/trucks")
+    List<TruckResponse> getAllTrucks();
+
+    /**
      * Calls GET /api/fleet/trucks/{truckId} on fleet-service.
      * Used to validate a manually provided truck ID and fetch its details.
      */

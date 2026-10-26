@@ -3,9 +3,13 @@ package com.fleet.fleet.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.fleet.fleet.client.ShipmentServiceClient;
+import com.fleet.fleet.client.ShipmentServiceClient.TruckActivityResponse;
 import com.fleet.fleet.dto.AssignTruckRequest;
 import com.fleet.fleet.dto.CreateDriverRequest;
 import com.fleet.fleet.dto.CreateTruckRequest;
@@ -20,6 +24,7 @@ import com.fleet.fleet.repository.TruckRepository;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import feign.FeignException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -36,6 +41,9 @@ class FleetServiceTest {
     @Mock
     private TruckRepository truckRepository;
 
+    @Mock
+    private ShipmentServiceClient shipmentServiceClient;
+
     private FleetMapper fleetMapper;
 
     private FleetService fleetService;
@@ -46,7 +54,7 @@ class FleetServiceTest {
     @BeforeEach
     void setUp() {
         fleetMapper = new FleetMapper();
-        fleetService = new FleetService(driverRepository, truckRepository, fleetMapper);
+        fleetService = new FleetService(driverRepository, truckRepository, fleetMapper, shipmentServiceClient);
 
         driver = Driver.builder()
             .id(UUID.randomUUID())
@@ -217,6 +225,58 @@ class FleetServiceTest {
         assertThatThrownBy(() -> fleetService.assignDriverToTruck(truck.getId(), new AssignTruckRequest(driver.getId())))
             .isInstanceOf(ResponseStatusException.class)
             .hasMessageContaining("truck is not available");
+    }
+
+    @Test
+    void shouldUnassignDriverFromTruck() {
+        truck.setStatus(TruckStatus.ASSIGNED);
+        truck.setAssignedDriver(driver);
+        when(truckRepository.findById(truck.getId())).thenReturn(Optional.of(truck));
+        when(shipmentServiceClient.getTruckActivity(truck.getId()))
+            .thenReturn(new TruckActivityResponse(truck.getId(), false));
+        when(truckRepository.save(any(Truck.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        var response = fleetService.unassignDriverFromTruck(truck.getId());
+
+        assertThat(response.status()).isEqualTo(TruckStatus.AVAILABLE);
+        assertThat(response.assignedDriver()).isNull();
+        verify(truckRepository).save(truck);
+    }
+
+    @Test
+    void shouldRejectUnassignWhenTruckIsOnActiveShipment() {
+        truck.setStatus(TruckStatus.ASSIGNED);
+        truck.setAssignedDriver(driver);
+        when(truckRepository.findById(truck.getId())).thenReturn(Optional.of(truck));
+        when(shipmentServiceClient.getTruckActivity(truck.getId()))
+            .thenReturn(new TruckActivityResponse(truck.getId(), true));
+
+        assertThatThrownBy(() -> fleetService.unassignDriverFromTruck(truck.getId()))
+            .isInstanceOf(ResponseStatusException.class)
+            .hasMessageContaining("truck is on an active shipment");
+        verify(truckRepository, never()).save(any(Truck.class));
+    }
+
+    @Test
+    void shouldRejectUnassignWhenShipmentServiceUnavailable() {
+        truck.setStatus(TruckStatus.ASSIGNED);
+        truck.setAssignedDriver(driver);
+        when(truckRepository.findById(truck.getId())).thenReturn(Optional.of(truck));
+        when(shipmentServiceClient.getTruckActivity(truck.getId())).thenThrow(mock(FeignException.class));
+
+        assertThatThrownBy(() -> fleetService.unassignDriverFromTruck(truck.getId()))
+            .isInstanceOf(ResponseStatusException.class)
+            .hasMessageContaining("could not verify active shipments");
+        verify(truckRepository, never()).save(any(Truck.class));
+    }
+
+    @Test
+    void shouldRejectUnassignWhenTruckHasNoDriver() {
+        when(truckRepository.findById(truck.getId())).thenReturn(Optional.of(truck));
+
+        assertThatThrownBy(() -> fleetService.unassignDriverFromTruck(truck.getId()))
+            .isInstanceOf(ResponseStatusException.class)
+            .hasMessageContaining("truck has no assigned driver");
     }
 
     @Test

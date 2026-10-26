@@ -6,6 +6,7 @@ import com.fleet.shipment.dto.CreateShipmentRequest;
 import com.fleet.shipment.dto.ExceptionAnalysisResult;
 import com.fleet.shipment.dto.ShipmentExceptionResponse;
 import com.fleet.shipment.dto.ShipmentResponse;
+import com.fleet.shipment.dto.TruckActivityResponse;
 import com.fleet.shipment.service.ShipmentService;
 import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.Valid;
@@ -39,6 +40,13 @@ public class ShipmentController {
     @GetMapping
     public List<ShipmentResponse> getAllShipments() {
         return shipmentService.getAllShipments();
+    }
+
+    @Operation(summary = "Check whether a truck is on an active shipment (used by fleet-service before unassign)")
+    @PreAuthorize("hasRole('DISPATCHER') or hasRole('ADMIN')")
+    @GetMapping("/trucks/{truckId}/active")
+    public TruckActivityResponse getTruckActivity(@PathVariable("truckId") UUID truckId) {
+        return shipmentService.getTruckActivity(truckId);
     }
 
     @Operation(summary = "Get a shipment by ID")

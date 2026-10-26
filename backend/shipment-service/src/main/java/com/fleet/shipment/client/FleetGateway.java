@@ -39,6 +39,11 @@ public class FleetGateway {
     }
 
     @CircuitBreaker(name = BREAKER)
+    public List<TruckResponse> getAllTrucks() {
+        return client.getAllTrucks();
+    }
+
+    @CircuitBreaker(name = BREAKER)
     public TruckResponse getTruckById(UUID truckId) {
         return client.getTruckById(truckId);
     }

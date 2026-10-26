@@ -144,6 +144,16 @@ public class FleetController {
         return fleetService.assignDriverToTruck(truckId, request);
     }
 
+    @Operation(summary = "Unassign the driver from a truck (truck becomes AVAILABLE)")
+    @PreAuthorize("hasRole('ADMIN')")
+    @PostMapping("/trucks/{truckId}/unassign")
+    public TruckResponse unassignDriverFromTruck(
+        @Parameter(description = "UUID of the truck", required = true)
+        @PathVariable("truckId") UUID truckId
+    ) {
+        return fleetService.unassignDriverFromTruck(truckId);
+    }
+
     private UUID extractAuthUserId(Principal principal) {
         if (principal == null || principal.getName() == null || principal.getName().isBlank()) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "missing authenticated user");

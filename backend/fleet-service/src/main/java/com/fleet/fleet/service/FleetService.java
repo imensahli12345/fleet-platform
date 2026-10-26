@@ -1,5 +1,6 @@
 package com.fleet.fleet.service;
 
+import com.fleet.fleet.client.ShipmentServiceClient;
 import com.fleet.fleet.dto.AssignTruckRequest;
 import com.fleet.fleet.dto.CreateDriverRequest;
 import com.fleet.fleet.dto.CreateTruckRequest;
@@ -16,6 +17,7 @@ import com.fleet.fleet.repository.TruckRepository;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
+import feign.FeignException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,11 +29,14 @@ public class FleetService {
     private final DriverRepository driverRepository;
     private final TruckRepository truckRepository;
     private final FleetMapper fleetMapper;
+    private final ShipmentServiceClient shipmentServiceClient;
 
-    public FleetService(DriverRepository driverRepository, TruckRepository truckRepository, FleetMapper fleetMapper) {
+    public FleetService(DriverRepository driverRepository, TruckRepository truckRepository, FleetMapper fleetMapper,
+                        ShipmentServiceClient shipmentServiceClient) {
         this.driverRepository = driverRepository;
         this.truckRepository = truckRepository;
         this.fleetMapper = fleetMapper;
+        this.shipmentServiceClient = shipmentServiceClient;
     }
 
     @Transactional
@@ -161,6 +166,29 @@ public class FleetService {
         return fleetMapper.toTruckResponse(truckRepository.save(truck));
     }
 
+    /**
+     * Removes the driver from a truck and makes the truck AVAILABLE again, so that
+     * both the truck and the driver can be deleted or reassigned.
+     */
+    @Transactional
+    public TruckResponse unassignDriverFromTruck(UUID truckId) {
+        Truck truck = truckRepository.findById(truckId)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "truck not found"));
+
+        if (truck.getStatus() != TruckStatus.ASSIGNED || truck.getAssignedDriver() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "truck has no assigned driver");
+        }
+
+        if (hasActiveShipment(truckId)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                "truck is on an active shipment: deliver or cancel it before unassigning the driver");
+        }
+
+        truck.setAssignedDriver(null);
+        truck.setStatus(TruckStatus.AVAILABLE);
+        return fleetMapper.toTruckResponse(truckRepository.save(truck));
+    }
+
     @Transactional(readOnly = true)
     public List<DriverResponse> getAllDrivers() {
         return driverRepository.findAll()
@@ -184,6 +212,19 @@ public class FleetService {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "cannot delete a driver currently assigned to a truck");
         }
         driverRepository.delete(driver);
+    }
+
+    /**
+     * Asks shipment-service whether the truck is on a PENDING, IN_TRANSIT or HALTED shipment.
+     * Fails closed: if shipment-service cannot answer, the unassign is refused rather than allowed.
+     */
+    private boolean hasActiveShipment(UUID truckId) {
+        try {
+            return shipmentServiceClient.getTruckActivity(truckId).hasActiveShipment();
+        } catch (FeignException exception) {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                "could not verify active shipments with shipment-service; try again later");
+        }
     }
 
     private String normalizeUpper(String value) {

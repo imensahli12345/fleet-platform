@@ -9,6 +9,7 @@ import com.fleet.shipment.dto.CreateShipmentRequest;
 import com.fleet.shipment.dto.ExceptionAnalysisResult;
 import com.fleet.shipment.dto.ShipmentExceptionResponse;
 import com.fleet.shipment.dto.ShipmentResponse;
+import com.fleet.shipment.dto.TruckActivityResponse;
 import com.fleet.shipment.entity.AuditLog;
 import com.fleet.shipment.entity.Category;
 import com.fleet.shipment.entity.Severity;
@@ -41,6 +42,10 @@ public class ShipmentService {
 
     private static final String FLEET_CIRCUIT_OPEN =
             "fleet-service is temporarily unavailable (circuit breaker open); please retry shortly";
+
+    /** A truck on a shipment in one of these statuses is busy and cannot be auto-assigned. */
+    private static final List<ShipmentStatus> ACTIVE_STATUSES =
+            List.of(ShipmentStatus.PENDING, ShipmentStatus.IN_TRANSIT, ShipmentStatus.HALTED);
 
     private final ShipmentRepository shipmentRepository;
     private final ShipmentExceptionRepository exceptionRepository;
@@ -81,12 +86,15 @@ public class ShipmentService {
                     throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "The requested truck must be ASSIGNED to a driver before it can take a shipment");
                 }
             } else {
-                // Auto-assign the first available truck
-                List<TruckResponse> availableTrucks = fleetGateway.getAvailableTrucks();
-                if (availableTrucks.isEmpty()) {
-                    throw new ResponseStatusException(HttpStatus.CONFLICT, "No available trucks found in the fleet");
-                }
-                assignedTruck = availableTrucks.get(0);
+                // Auto-assign: fleet-service's "available" trucks have no driver yet, so pick the
+                // first ASSIGNED truck (truck + driver) that is not already on an active shipment.
+                assignedTruck = fleetGateway.getAllTrucks().stream()
+                        .filter(truck -> "ASSIGNED".equals(truck.status()))
+                        .filter(truck -> truck.assignedDriver() != null && truck.assignedDriver().id() != null)
+                        .filter(truck -> !shipmentRepository.existsByAssignedTruckIdAndStatusIn(truck.id(), ACTIVE_STATUSES))
+                        .findFirst()
+                        .orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT,
+                                "No truck with an assigned driver is free to take a shipment"));
             }
         } catch (CallNotPermittedException e) {
             // Circuit breaker OPEN: fleet-service has been failing, so we fail fast instead of waiting on it.
@@ -117,6 +125,13 @@ public class ShipmentService {
                 .build();
 
         return shipmentMapper.toResponse(shipmentRepository.save(shipment));
+    }
+
+    /** Used by fleet-service before unassigning a truck: a truck on an active shipment must keep its driver. */
+    @Transactional(readOnly = true)
+    public TruckActivityResponse getTruckActivity(UUID truckId) {
+        return new TruckActivityResponse(truckId,
+                shipmentRepository.existsByAssignedTruckIdAndStatusIn(truckId, ACTIVE_STATUSES));
     }
 
     @Transactional(readOnly = true)

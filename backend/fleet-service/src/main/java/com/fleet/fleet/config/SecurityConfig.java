@@ -38,6 +38,7 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.DELETE, "/api/fleet/drivers/*").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.POST, "/api/fleet/trucks").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.POST, "/api/fleet/trucks/*/assign").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.POST, "/api/fleet/trucks/*/unassign").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.DELETE, "/api/fleet/trucks/*").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.GET, "/api/fleet/**").authenticated()
                 .anyRequest().authenticated()

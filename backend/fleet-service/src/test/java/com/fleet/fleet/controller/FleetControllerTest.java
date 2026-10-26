@@ -18,6 +18,7 @@ import com.fleet.fleet.dto.TruckResponse;
 import com.fleet.fleet.dto.UpdateDriverActivationRequest;
 import com.fleet.fleet.dto.UpdateMyDriverProfileRequest;
 import com.fleet.fleet.entity.TruckStatus;
+import com.fleet.fleet.security.JwtService;
 import com.fleet.fleet.service.FleetService;
 import java.util.List;
 import java.util.UUID;
@@ -41,6 +42,10 @@ class FleetControllerTest {
 
     @MockBean
     private FleetService fleetService;
+
+    // Needed by JwtAuthenticationFilter, which @WebMvcTest picks up even with addFilters = false.
+    @MockBean
+    private JwtService jwtService;
 
     @Test
     void shouldCreateDriver() throws Exception {
