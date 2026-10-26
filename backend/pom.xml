@@ -18,6 +18,8 @@
   </modules>
   <properties>
     <java.version>17</java.version>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
     <spring-boot.version>3.2.6</spring-boot.version>
     <spring-cloud.version>2023.0.3</spring-cloud.version>
   </properties>
@@ -50,9 +52,20 @@
             <release>${java.version}</release>
           </configuration>
         </plugin>
+        <!-- Pinned to the Spring Boot version and bound to "repackage": without this, "mvn package"
+             builds a thin jar (no dependencies, not runnable) because this parent does not inherit
+             from spring-boot-starter-parent. Needed for the Docker images. -->
         <plugin>
           <groupId>org.springframework.boot</groupId>
           <artifactId>spring-boot-maven-plugin</artifactId>
+          <version>${spring-boot.version}</version>
+          <executions>
+            <execution>
+              <goals>
+                <goal>repackage</goal>
+              </goals>
+            </execution>
+          </executions>
         </plugin>
       </plugins>
     </pluginManagement>
